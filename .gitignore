@@ -1,0 +1,35 @@
+# ── 用户数据 / 账号配置：绝不入库 ──────────────────────────────
+# 真实的账号清单（含 profile 名、目录名，属于个人配置）
+accounts.json
+accounts.local.json
+accounts.*.json
+# 但配置模板是文档，必须入库
+!accounts.example.json
+
+# 下载产物：报表 CSV、分段、合并结果 —— 属于业务数据，禁止提交
+alimama-data/
+output/
+raw/
+downloads/
+*.csv
+*.xlsx
+*.xls
+
+# 独立 Chrome 数据目录（含 cookie / 登录态），绝不能入库
+profiles/
+chrome-data-dir/
+.userdata/
+
+# ── 运行时 / 系统杂物 ────────────────────────────────────────
+node_modules/
+.DS_Store
+__pycache__/
+*.pyc
+*.log
+.temp-execution-*.js
+
+# 凭据 / 密钥兜底
+*.key
+*.pem
+.env
+.env.*
