@@ -21,16 +21,19 @@
 
 官方 issue #825 把「每次都要点允许」标为 **not planned** —— 该路径**无法免弹窗**。
 
-**只有传非默认 `--user-data-dir` 才能零弹窗。**
+**只有传非默认 `--user-data-dir` 才能零弹窗。** 所以本技能**只做这一种模式**：
+每个账号一个独立的 Chrome 数据目录。
 
-因此本技能提供两种账号模式：
+```
+账号数据目录（与日常 Chrome 完全隔离）
+        ↑ 首次 login 一次，登录态永久保存
+        ↑ 连接时不需要点任何「允许」
+        ↑ 不需要退出使用者日常的 Chrome
+```
 
-| | A. `userDataDir`（推荐） | B. `profileDirectory` |
-|---|---|---|
-| 免弹窗 | ✅ 完全不需要点击 | ❌ 每次连接都要人工点「允许」 |
-| 干扰日常 Chrome | ✅ 无 | ❌ 切换账号要先退出用户的 Chrome |
-| 登录成本 | 首次 `login` 一次，之后长期有效 | 沿用已有登录态 |
-| 适用 | 无人值守、多账号批量 | 只图省一次登录 |
+> 早期版本曾提供「复用使用者现有 profile」的选项，**已彻底移除**：
+> 那条路每次连接都必须人工点「允许」，切换账号还要先退出使用者的 Chrome，
+> 对使用者是干扰，也容易让人搞不清该选哪个。只留一条路，行为唯一。
 
 ## 安装
 
@@ -57,10 +60,20 @@ export NODE_PATH=<node workspace>/node_modules
 ```bash
 S=scripts   # 或 ~/.workbuddy/skills/alimama-report-export/scripts
 
-node $S/multi_account.js init          # 扫描本机 Chrome profile（不启动浏览器）
+node $S/multi_account.js init          # 扫描已有账号目录（不启动浏览器、不改配置）
 node $S/multi_account.js check         # 比对配置与现状，退出码 2 = 有变化需确认
-node $S/multi_account.js login [label] # A 模式首次登录（缺省=全部账号）
+node $S/multi_account.js login [label] # 首次登录（缺省=全部账号）
 node $S/multi_account.js run           # 正式导出（开跑前自动 check）
+```
+
+`accounts.json` 里每个账号**唯一必填的是 `label`**：
+
+```jsonc
+{
+  "profileRoot": "~/.workbuddy/profiles/alimama",  // 账号数据目录根，每个账号 = profileRoot/<label>
+  "biz": 70, "days": 365, "chunk": 90,
+  "accounts": [ { "label": "淘宝联盟01" } ]
+}
 ```
 
 单账号（复用当前 CDP 连接）：

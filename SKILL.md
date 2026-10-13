@@ -162,19 +162,20 @@ Chrome 136+ / 144+ 加了两道限制，网上很多教程已经过时：
 
 **结论：只要传一个非默认的 `--user-data-dir`，两套机制都不生效 —— 零弹窗、可无人值守。**
 
-因此本技能有 A / B 两种账号模式，**默认用 A**：
+**所以本技能只做一种模式：每个账号一个独立 Chrome 数据目录。**
 
-| | A. `userDataDir`（推荐） | B. `profileDirectory` |
-|---|---|---|
-| 免弹窗 | ✅ 完全不需要点任何东西 | ❌ **每次连接都要人工点「允许」** |
-| 干扰用户日常 Chrome | ✅ 无（独立实例，不用退出它） | ❌ 切换账号必须先完全退出用户的 Chrome |
-| 登录成本 | 首次用 `login` 命令登录一次，之后长期有效 | 沿用已有登录态 |
-| 取 CDP 地址 | 从子进程输出解析 `DevTools listening on ws://…`（Chrome 147+ 不写 `DevToolsActivePort`） | 读默认目录的 `DevToolsActivePort` |
-| 适用 | 无人值守、批量多账号 | 只图省一次登录、且能接受手动点允许 |
+> 曾经提供过「复用使用者现有 profile」的选项，**已彻底移除**。
+> 原因就是上表第 144+ 条：那条路每次连接都必须人工点「允许」，而且切换账号还要先把使用者
+> 日常的 Chrome 退掉。这两种行为对使用者都是干扰，也容易让人搞不清该选哪个。
+> 只留一条路，行为和预期都唯一。
 
-> 另外：Chrome 同一份 user-data-dir 只能跑一个进程。
-> `Chrome --profile-directory="Profile 6"` 在已有实例时会输出
-> 「正在现有的浏览器会话中打开。」而**不**开端口——这是 B 模式必须退出 Chrome 的原因。
+该模式的三个好处：
+
+| | 说明 |
+|---|---|
+| 免弹窗 | 完全不需要点任何东西，可无人值守 |
+| 不干扰 | 独立实例，**不需要退出使用者日常的 Chrome** |
+| 登录成本 | 首次 `login` 登录一次，之后长期有效（登录态就在该目录里） |
 
 ### 四个动作
 
@@ -183,40 +184,39 @@ export NODE_PATH=<node workspace>/node_modules
 cd <工作目录>
 S=~/.workbuddy/skills/alimama-report-export/scripts
 
-node $S/multi_account.js init          # 扫描 profile 清单（不启动 Chrome、不改配置）
+node $S/multi_account.js init          # 扫描已有账号目录（不启动浏览器、不改配置）
 node $S/multi_account.js check         # 比对配置与现状，退出码 2 = 有变化需确认
-node $S/multi_account.js login [label] # A 模式首次登录（缺省=全部账号）
+node $S/multi_account.js login [label] # 首次登录（缺省=全部账号）
 node $S/multi_account.js run           # 正式跑（开跑前自动 check，有变化即中止）
 ```
 
 退出码：`0` 正常 / `2` **需要与用户确认** / `1` 报错。
 
 `login` 会打开该账号的浏览器并停在阿里妈妈页，脚本轮询检测登录（最多 10 分钟），
-检测到就自动收工。**A 模式每个账号只需要跑一次**。
+检测到就自动收工。**每个账号只需要登录一次，之后长期有效。**
 
 ### 首次初始化流程（必须与用户确认）
 
-1. 执行 `init`，得到 JSON：本机全部 Chrome profile（`profileDirectory` / `label` / `gaia`）、
-   按关键字（默认「淘宝联盟」）匹配的 profile，以及两种模式的说明。
-2. **把清单拿给用户确认两件事**：
-   - 用 A 模式还是 B 模式（**默认推荐 A**：免弹窗、不干扰日常浏览器）
-   - 要抓哪些账号
-   不要自动全选。
-3. 按确认结果写 `accounts.json`（结构见 `scripts/accounts.example.json`）：
+1. 执行 `init`，得到 JSON：账号根目录、**磁盘上已有的账号目录**（含各目录上次登录到的 `memberId`）、
+   以及当前配置。这一步**不启动浏览器、不改配置**。
+2. **问用户要抓几个账号、分别叫什么名字。** 不要自动决定。
+3. 写入 `accounts.json`（结构见 `scripts/accounts.example.json`）：
 
 ```jsonc
 {
-  "profilePattern": "淘宝联盟", "biz": 70, "days": 365, "chunk": 90, "port": 9222,
+  "profileRoot": "~/.workbuddy/profiles/alimama",  // 账号数据目录根；每个账号 = profileRoot/<label>
+  "biz": 70, "days": 365, "chunk": 90, "basePort": 9222,
   "accounts": [
-    // A 模式（推荐）：标签页里唯一需要维护的字段是 label
-    { "userDataDir": "~/.workbuddy/profiles/alimama-01", "label": "淘宝联盟01" },
-    // B 模式：profileDirectory 是稳定标识；chromeName 仅用于检测改名，别手改
-    { "profileDirectory": "Profile 6", "label": "淘宝联盟02", "chromeName": "淘宝联盟02" }
+    { "label": "淘宝联盟01" },
+    { "label": "淘宝联盟02" }
   ]
 }
 ```
 
-4. A 模式账号执行 `login` 登录一次（可指定 label 逐个来）。
+每个账号**唯一必填的就是 `label`**（决定数据目录名和输出子目录名）。
+需要把某个账号的数据目录放到别处时，才加 `userDataDir` 覆盖。
+
+4. 逐个 `login`（可一次跑全部）：`node scripts/multi_account.js login`
 5. `check` 确认无变化后 `run`。
 
 ### 后续调用流程（增量确认）
@@ -224,41 +224,33 @@ node $S/multi_account.js run           # 正式跑（开跑前自动 check，有
 每次调用**先跑 `check`**（`run` 内部也会先查一遍）：
 
 - **有变化 → 中止并输出 JSON**（退出码 2），把变化项交给用户确认后再更新 `accounts.json`
-- 变化分四类：
+- 变化分两类：
 
-| 类型 | 适用模式 | 含义 | 处理 |
-|---|---|---|---|
-| `missing` | B | 配置里的 profile 在 Chrome 里已不存在 | 阻塞性，必须修配置 |
-| `candidates` | B | 出现名字匹配关键字但未纳入配置的 profile | 疑似新账号，问用户是否加入 |
-| `renamed` | B | Chrome 侧 profile 名改了（比对 `chromeName`，**不是** `label`） | 提示用户，更新 `chromeName` |
-| `uninitialized` | A | 配置的 `userDataDir` 还不存在 | 说明没跑过 `login`，提醒用户登录 |
+| 类型 | 含义 | 处理 |
+|---|---|---|
+| `uninitialized` | 配置里的账号目录还不存在 | 说明没跑过 `login`，提醒用户先登录 |
+| `newAccounts` | 磁盘上出现未纳入配置的账号目录 | **疑似新增账号**，问用户是否加入配置 |
 
 - **无变化 → 直接跑**，不再打扰用户。
 
 ### 流程细节
 
 ```
-A 模式账号（推荐，顺序无副作用）：
-  1. 若该目录已有实例 → 退出它
+对每个账号：
+  1. 若该账号目录已有实例 → 退出它（SIGTERM，只影响这一个账号）
   2. 直接 spawn Chrome 二进制：
      --no-sandbox --remote-debugging-port=<空闲端口> --remote-allow-origins=*
-     --user-data-dir=<该账号目录> --no-first-run --no-default-browser-check
-  3. 从子进程输出解析 "DevTools listening on ws://..."（Chrome 147+ 不写 DevToolsActivePort）
-  4. connectOverCDP → 打开订单概览页 → whoami 校验 → 下载 → 合并
+     --user-data-dir=<账号目录> --no-first-run --no-default-browser-check
+     （端口从 basePort+1 起自动找空闲的，避免抢占）
+  3. 从子进程输出解析 "DevTools listening on ws://..."
+     —— Chrome 147+ 在自定义 user-data-dir 下不写 DevToolsActivePort，只能这么取
+  4. connectOverCDP → 打开订单概览页 → whoami 校验登录 → 分段下载 + 合并
   5. 结束时 SIGTERM 该实例
-
-B 模式账号（会弹授权框）：
-  1. 退出用户的 Chrome，等它真正退出（SingletonLock 指向的 pid 消失）
-  2. open -a "Google Chrome" --args --remote-debugging-port=<port>
-     --remote-allow-origins=* --profile-directory=<dir>
-  3. 等端口就绪 → 读默认目录的 DevToolsActivePort → 连接
-     ⚠ 连接会 403，需**用户手动点「允许」**；脚本会持续重试并打印提示（最多 3 分钟）
-  4. 同上做下载
-  5. 结束时退出 Chrome
-全部账号跑完：还原用户原本在用的 profile，并写 alimama-data/_summary.json
+全部账号跑完 → 写 alimama-data/_summary.json
 ```
 
-`connectCdp` 在收到 403 时会打印「请点允许」并**持续重试**，不会一次失败就退出。
+`whoami` 成功后会把 `memberId` 写进 `<账号目录>/.alimama-account.json`，
+这样 `init` / `check` 不用启动浏览器就能显示每个账号上次登录的是谁。
 
 输出结构：
 
@@ -276,9 +268,9 @@ alimama-data/
 
 ### 注意事项
 
-- 切换账号会**退出用户当前的 Chrome**。开跑前先确认用户没有正在填的表单之类的活。
-- 想保留用户原来的窗口布局，别设 `ALIMAMA_RESTORE=0`（默认会还原）。
-- profile 目录名（`Profile 6`）是稳定标识，`label` 只是显示名。改 `label` 会改变输出子目录名。
+- 全程**不需要**使用者退出日常 Chrome，也**不会**弹任何授权框。
+- 改 `label` 会同时改数据目录名和输出子目录名；已登录过的账号改名等于换了个新账号，要重新登录。
+- 账号数据目录里含 cookie / 登录态，**不要提交到 git、不要外传**（仓库 `.gitignore` 已排除）。
 
 ### 安全校验（已内置）
 

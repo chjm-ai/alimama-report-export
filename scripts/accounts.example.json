@@ -1,27 +1,22 @@
 {
-  "_说明": "阿里妈妈多账号配置。由 init 扫描 + 与用户确认后生成，放工作目录下或用 ALIMAMA_ACCOUNTS 指定。",
-  "_两种模式": {
-    "A(userDataDir)": "推荐。独立 Chrome 数据目录，零弹窗、可无人值守、不干扰用户日常 Chrome、切换账号无需退出用户浏览器。首次用 `login` 命令登录一次，之后长期有效。",
-    "B(profileDirectory)": "复用用户现有 Chrome profile。沿用已有登录态，但【每次连接都要人工点「允许远程调试?」】，且切换账号必须完全退出用户 Chrome。Chrome 官方标记为 not planned，无法免弹窗。"
-  },
+  "_说明": "阿里妈妈多账号配置。由 init 扫描 + 与用户确认后生成。放工作目录下，或用 ALIMAMA_ACCOUNTS 指定路径。",
+  "_工作方式": "每个账号一个独立 Chrome 数据目录，与使用者的日常 Chrome 完全隔离。首次 login 登录一次，之后长期有效，全程不需要点任何「允许调试」。",
   "_字段": {
-    "userDataDir": "A 模式：独立数据目录，支持 ~ 展开",
-    "profileDirectory": "B 模式：Chrome profile 目录名，如 Default / Profile 6",
-    "label": "显示名，同时用作输出子目录名，可随意改",
-    "chromeName": "B 模式专用：初始化时记录的 Chrome 侧 profile 名，仅用于检测改名",
-    "profilePattern": "关键字，用于在 check 时提示「疑似新增账号」",
+    "profileRoot": "账号数据目录的根目录。每个账号的目录 = profileRoot/<label>。默认 ~/.workbuddy/profiles/alimama-accounts（该目录下每个子目录都是一个独立的 Chrome user-data-dir）",
+    "accounts[].label": "账号名字。同时决定数据目录名与输出子目录名，可随意起",
+    "accounts[].userDataDir": "可选。显式指定该账号的 Chrome 数据目录，覆盖 profileRoot/<label>",
     "biz": "报表类型，订单明细报表为 70",
     "days": "回溯天数",
     "chunk": "单段天数，上限 90",
-    "port": "调试端口，B 模式用；A 模式会自动找空闲端口"
+    "basePort": "调试端口基准值，实际每个账号会自动挑空闲端口，默认 9222"
   },
-  "profilePattern": "淘宝联盟",
+  "profileRoot": "~/.workbuddy/profiles/alimama-accounts",
   "biz": 70,
   "days": 365,
   "chunk": 90,
-  "port": 9222,
+  "basePort": 9222,
   "accounts": [
-    { "userDataDir": "~/.workbuddy/profiles/alimama-01", "label": "淘宝联盟01" },
-    { "userDataDir": "~/.workbuddy/profiles/alimama-02", "label": "淘宝联盟02" }
+    { "label": "淘宝联盟01" },
+    { "label": "淘宝联盟02" }
   ]
 }

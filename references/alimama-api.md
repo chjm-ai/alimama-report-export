@@ -141,31 +141,38 @@ navigator.userAgent = "... Chrome/155.0.0.0 Safari/537.36"
 |---|---|---|
 | `connect ECONNREFUSED 127.0.0.1:9222` | 端口没监听／沙箱网络命名空间隔离 | 确认端口 + 非沙箱执行 |
 | `Unexpected status 404 ... /json/version/` | Playwright 用了 http 形式（带尾斜杠） | 改传完整 `ws://` 地址 |
-| `Connection rejected 403` | Chrome 拒绝并发 CDP 连接 | 重试（`pw.js` 已内置） |
-| Chrome 反复弹「允许调试」 | 每条命令都新建了连接 | 合成一个脚本、只连一次 |
+| `Connection rejected 403` | 用了**默认 user-data-dir**，落进 Chrome 144+ 的授权流程 | 改用独立 `--user-data-dir`（本技能的做法） |
+| Chrome 反复弹「允许调试」 | 同上：调试真实 profile 每次都弹 | 改用独立 `--user-data-dir`，该模式完全不弹 |
 | 页面选到了 `chrome://inspect` | 用了 `pages[0]` | 用 `TARGET_URL` 关键字匹配 |
 | 表格「暂无数据」 | 时间范围只有"今天"／账号无数据 | 调大范围；测试账号空属正常 |
 | 文件名像没有扩展名 | 阿里原始名超长含 `~`/括号，Finder 截断 | 自行重命名为短名 + `.csv` |
-| 启动输出「正在现有的浏览器会话中打开。」且端口没起来 | 同一 user-data-dir 已有 Chrome 进程，`--profile-directory` 被转发 | 先完全退出 Chrome 再启动；或改用独立 `--user-data-dir` |
+| 启动输出「正在现有的浏览器会话中打开。」且端口没起来 | 同一 user-data-dir 已有 Chrome 进程，启动参数被转发 | 用各自独立的 `--user-data-dir`；或先退出该目录的实例 |
 
 ## 多账号相关（Chrome 限制）
 
-- 同一 `--user-data-dir` 下 **只能有一个 Chrome 进程**，无法为多个 profile 各开一个调试端口。
-- 因此多账号只能：**顺序切换**（退出 Chrome → 带 `--profile-directory` 启动）或 **每账号独立 `--user-data-dir`**。
-- Chrome 是否在运行可以用 `SingletonLock` 判断：
-  `readlink ~/Library/Application\ Support/Google/Chrome/SingletonLock` → `hostname-<pid>`
+**本技能只采用一种模式：每个账号一个独立的 `--user-data-dir`。** 原因见下。
+
+- 同一 `--user-data-dir` 下**只能有一个 Chrome 进程**。
+  已有实例时，`Chrome --profile-directory="Profile 6"` 会输出
+  「正在现有的浏览器会话中打开。」而**不**开端口——参数被转发丢弃。
+  所以"多个 profile 各开一个调试端口"做不到。
+- 想让多个账号并发/互不干扰，唯一可行的是**各自独立 `--user-data-dir`**
+  （顺带也绕开了下面两套安全机制）。
+- 判断某个目录的 Chrome 是否在运行：`readlink <dir>/SingletonLock` → `hostname-<pid>`，
   再 `kill -0 <pid>`。指向死进程说明锁是陈旧的、Chrome 已退出。
-- 优雅退出：`osascript -e 'tell application "Google Chrome" to quit'`
-- 切换账号时**必须等 Chrome 完全退出**再启动，否则新 profile 的参数会被丢弃。
+- 退出该实例用 `kill -TERM <pid>` 即可（用 default 目录时才需要
+  `osascript -e 'tell application "Google Chrome" to quit'`）。
 
-### 取 CDP 地址（两种模式不同）
+### 取 CDP 地址（独立 `--user-data-dir`）
 
-| 模式 | 方式 |
-|---|---|
-| A. 独立 `--user-data-dir` | 自己 spawn 进程，从输出解析 `DevTools listening on (ws:\/\/\S+)`。**Chrome 147+ 不写 `DevToolsActivePort`** |
-| B. 复用默认 profile | 读默认目录的 `DevToolsActivePort`（首行端口 / 次行 `/devtools/browser/<uuid>`），带重试 |
+自己 spawn 进程，从子进程输出解析：
 
-实测 A 模式输出：`DevTools listening on ws://127.0.0.1:9224/devtools/browser/469bd822-...`
+```
+DevTools listening on ws://127.0.0.1:9224/devtools/browser/469bd822-f941-404b-b4d2-bd0657fa5908
+```
+
+**Chrome 147+ 在自定义 `user-data-dir` 下不写 `DevToolsActivePort` 文件**，只能这么取。
+（只有默认目录才会写那个文件。）
 
 > `GET /json/version` **不可靠**：行为不稳定，有时正常返回 JSON，有时返回空 / 404（与 Host 头无关）。
 > 不要用它来发现地址。
@@ -178,6 +185,7 @@ navigator.userAgent = "... Chrome/155.0.0.0 Safari/537.36"
 | Chrome 144+ | 调试**真实 profile**（`chrome://inspect/#remote-debugging` 授权路径）时，**每一次** CDP 连接都会弹「允许远程调试?」对话框；未点允许 → WebSocket 升级返回 **403 `Connection rejected`** |
 
 官方 issue #825 已将「每次都要点允许」标为 **not planned** —— 无法通过配置免除。
+**这正是本技能不提供「复用真实 profile」选项的原因。**
 
 **只要传非默认 `--user-data-dir`，两套机制都不生效 → 零弹窗。**
 
@@ -192,12 +200,12 @@ navigator.userAgent = "... Chrome/155.0.0.0 Safari/537.36"
 注意：`--remote-allow-origins=*` **只能解决 Origin 那一类** 403；
 「Connection rejected」属于授权流程，加这个参数**没有用**，必须改用独立目录。
 
-### 平台默认 user-data-dir 位置
+### 平台默认 user-data-dir 位置（这些目录要避开）
 
 - macOS：`~/Library/Application Support/Google/Chrome`
 - Windows：`%LOCALAPPDATA%\Google\Chrome\User Data`
 - Linux：`~/.config/google-chrome`
 
 把默认 profile 的文件**复制**到自定义目录通常救不回登录态（cookie 加密与目录绑定），
-所以想保留真实登录态只能用 B 模式（并接受每次点允许）。
+所以不要指望用拷贝的方式「既复用登录又免弹窗」——在独立目录里老实登录一次更省事。
 
